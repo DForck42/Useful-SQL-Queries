@@ -1,0 +1,25 @@
+/*
+  this queries shows what percentage of queries in the plan cache were created within the last 24 hours, the last 4 hours, and the last hour.
+  it also shows how many plans are in the plan cache, what percentage are single use, and when sql server was last started.
+  
+  most of this code was copied from SP_BlitzCache from the SQL Server First Responder Kit:  https://github.com/BrentOzarULTD/SQL-Server-First-Responder-Kit
+*/
+
+
+;WITH x AS 
+(
+	SELECT SUM(CASE WHEN DATEDIFF(HOUR, deqs.creation_time, SYSDATETIME()) <= 24 THEN 1 ELSE 0 END) AS [plans_24],
+		   SUM(CASE WHEN DATEDIFF(HOUR, deqs.creation_time, SYSDATETIME()) <= 4 THEN 1 ELSE 0 END) AS [plans_4],
+		   SUM(CASE WHEN DATEDIFF(HOUR, deqs.creation_time, SYSDATETIME()) <= 1 THEN 1 ELSE 0 END) AS [plans_1],
+		   COUNT(deqs.creation_time) AS [total_plans],
+		   SUM(CASE WHEN deqs.execution_count = 1 THEN 1 ELSE 0 END) AS SingleUsePlans
+	FROM sys.dm_exec_query_stats AS deqs
+)
+SELECT CONVERT(DECIMAL(3,2), NULLIF(x.plans_24, 0) / (1. * NULLIF(x.total_plans, 0))) * 100 AS [percent_24],
+	   CONVERT(DECIMAL(3,2), NULLIF(x.plans_4 , 0) / (1. * NULLIF(x.total_plans, 0))) * 100 AS [percent_4],  --percent created in the last 4 hours
+	   CONVERT(DECIMAL(3,2), NULLIF(x.plans_1 , 0) / (1. * NULLIF(x.total_plans, 0))) * 100 AS [percent_1],  --percent created in last hour
+	   x.total_plans,
+	   	CONVERT(DECIMAL(3,2), NULLIF(x.SingleUsePlans , 0) / (1. * NULLIF(x.total_plans, 0))) * 100 AS [percent_singleuse],		
+		(SELECT sqlserver_start_time FROM sys.dm_os_sys_info) AS SQLServerLastStart,
+		GETDATE() AS CollectionDt
+FROM x
